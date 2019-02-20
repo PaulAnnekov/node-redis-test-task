@@ -21,9 +21,10 @@ async function run () {
 function setUpDB () {
   redisClient = redis.createClient()
   const subClient = redis.createClient()
+  // Re-schedule task on any tasks list change.
   subClient.psubscribe(`__keyspace@*__:${DB_NS_TASKS}:*`)
   subClient.on('pmessage', (pattern, channel, message) => {
-    console.debug(`Tasks list changed: ${channel}: ${message}`)
+    console.debug(`Tasks list changed. ${channel}: ${message}`)
     getNextTask()
   })
   getNextTask()
@@ -47,7 +48,7 @@ async function onRequest (req, res) {
   try {
     await addTask(task)
   } catch (e) {
-    console.error(e)
+    console.error('Error when trying to add a task', e)
     return res.status(500).send('Temporary error, retry')
   }
   res.status(200).send('Queued')
@@ -55,14 +56,15 @@ async function onRequest (req, res) {
 
 async function addTask (task) {
   for (let i = 0; i < 3; i++) {
-    const res = await redisClient.setnx(`${DB_NS_TASKS}:${task.key}`, task.message)
+    const res = await redisClient.setnx(`${DB_NS_TASKS}:${task.key}`,
+      task.message)
     if (res) {
       console.log(`Enqueued a task at ${task.time}`)
       return
     }
-    task.genKey()
+    task.changeKey()
   }
-  throw new Error(`Can't add task after 3 tries, last key: ${task.key}`)
+  throw new Error(`Can't add a task after 3 tries, last key: ${task.key}`)
 }
 
 async function getNextTask () {

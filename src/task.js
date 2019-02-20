@@ -5,7 +5,7 @@ class Task {
     if (key) {
       this.key = key
     } else {
-      this.genKey()
+      this.changeKey()
     }
   }
 
@@ -20,9 +20,9 @@ class Task {
     return new Task(+data.time, data.message)
   }
 
-  genKey () {
+  changeKey () {
     this.key = `${this.time}:${Math.random()}`
   }
 }
 
-exports = Task
+module.exports = Task
