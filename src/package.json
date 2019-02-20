@@ -1,0 +1,25 @@
+{
+    "name": "node-redis-test-task",
+    "version": "0.0.1",
+    "description": "Node.js app with API and Redis as a DB",
+    "main": "app.js",
+    "author": "Paul Annekov",
+    "scripts": {
+        "start": "node app.js"
+    },
+    "license": "ISC",
+    "dependencies": {
+        "body-parser": "1.18.3",
+        "express": "4.16.4",
+        "morgan": "1.9.1",
+        "redis": "^2.8.0"
+    },
+    "devDependencies": {
+        "eslint": "^5.14.0",
+        "eslint-config-standard": "^12.0.0",
+        "eslint-plugin-import": "^2.16.0",
+        "eslint-plugin-node": "^8.0.1",
+        "eslint-plugin-promise": "^4.0.1",
+        "eslint-plugin-standard": "^4.0.0"
+    }
+}
