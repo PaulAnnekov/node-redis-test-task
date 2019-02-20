@@ -2,7 +2,7 @@ const express = require('express')
 const morgan = require('morgan')
 const bodyParser = require('body-parser')
 const Task = require('./task.js')
-let redis = require('./redis.js')
+const redis = require('./redis.js')
 const DB_NS_TASKS = 'tasks'
 let redisClient, nextTask, nextSchedule
 
