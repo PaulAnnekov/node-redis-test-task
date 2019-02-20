@@ -1,6 +1,9 @@
 #  Node + Redis test task
 
-Test task built using Node.js + Redis which echoes a message at a given time.
+Test task built using Node.js + Redis which accepts an API request to echo a
+message at a given time and echoes it when time has come. There can be multiple
+servers which accept requests. Only single server should print a message when
+time has come.
 
 ## Usage
 
