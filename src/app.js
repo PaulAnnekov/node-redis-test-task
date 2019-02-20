@@ -1,3 +1,18 @@
+// Explanation:
+// We store each task (=request) as
+//   tasks:[unix time]:[random string] => message
+// On init and on each change in tasks:* namespace we are getting all tasks:*
+// keys, searching for the next task (earliest one) and schedule its execution.
+// On execution we are trying to delete it and if delete was successful we
+// print a task message. If it wasn't then it means other process handled task
+// first.
+//
+// Possible problems:
+// 1. If there will be a lot (A LOT) of task additions, KEYS call can be slow
+// and we do it on each change in tasks:*
+// 2. There can be a case when we removed a task and process was immediately
+// killed, so we didn't print the message.
+
 const express = require('express')
 const morgan = require('morgan')
 const bodyParser = require('body-parser')
@@ -101,7 +116,7 @@ async function execTask () {
     return
   }
   // I assume it's nearly impossible that process will die between successful
-  // task removal and print, so we can get rid of WATCH and MULTI.
+  // task removal and print, so we can avoid using WATCH and MULTI.
   console.log(nextTask.message)
 }
 
