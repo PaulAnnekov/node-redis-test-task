@@ -9,6 +9,7 @@
     },
     "license": "ISC",
     "dependencies": {
+        "async-redis": "^1.1.7",
         "body-parser": "1.18.3",
         "express": "4.16.4",
         "morgan": "1.9.1",

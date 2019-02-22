@@ -1,29 +1,25 @@
 // Explanation:
 // We store each task (=request) as
+//   times => sorted set([unix time] [unix time]:[random string], ...)
 //   tasks:[unix time]:[random string] => message
-// On init and on each change in tasks:* namespace we are getting all tasks:*
-// keys, searching for the next task (earliest one) and schedule its execution.
+// On init and on each change in times:* namespace we are getting a task with
+// the lowest score (earliest) and schedule its execution.
 // On execution we are trying to delete it and if delete was successful we
 // print a task message. If it wasn't then it means other process handled task
 // first.
-//
-// Possible problems:
-// 1. If there will be a lot (A LOT) of task additions, KEYS call can be slow
-// and we do it on each change in tasks:*
-// 2. There can be a case when we removed a task and process was immediately
-// killed, so we didn't print the message.
 
 const express = require('express')
 const morgan = require('morgan')
 const bodyParser = require('body-parser')
 const Task = require('./task.js')
-const redis = require('./redis.js')
+const asyncRedis = require('async-redis')
+const { promisify } = require('util')
 const DB_NS_TASKS = 'tasks'
+const DB_NS_TIMES = 'times'
 let redisClient, nextTask, nextSchedule
 
-function parseKey (fullKey) {
-  const parts = fullKey.split(':')
-  return { fullKey, key: `${parts[1]}:${parts[2]}`, time: +parts[1] }
+function createClient () {
+  return asyncRedis.createClient(process.env.REDIS_URL)
 }
 
 async function run () {
@@ -34,10 +30,10 @@ async function run () {
 }
 
 function setUpDB () {
-  redisClient = redis.createClient()
-  const subClient = redis.createClient()
-  // Re-schedule task on any tasks list change.
-  subClient.psubscribe(`__keyspace@*__:${DB_NS_TASKS}:*`)
+  redisClient = createClient()
+  const subClient = createClient()
+  // Re-schedule task on any times list change.
+  subClient.psubscribe(`__keyspace@*__:${DB_NS_TIMES}`)
   subClient.on('pmessage', (pattern, channel, message) => {
     console.debug(`Tasks list changed. ${channel}: ${message}`)
     getNextTask()
@@ -70,54 +66,53 @@ async function onRequest (req, res) {
 }
 
 async function addTask (task) {
-  for (let i = 0; i < 3; i++) {
-    const res = await redisClient.setnx(`${DB_NS_TASKS}:${task.key}`,
-      task.message)
-    if (res) {
-      console.log(`Enqueued a task at ${task.time}`)
-      return
-    }
-    task.changeKey()
+  const multi = redisClient.multi()
+  const exec = promisify(multi.exec.bind(multi))
+  multi.zadd(`${DB_NS_TIMES}`, 'NX', task.time, task.key)
+  multi.setnx(`${DB_NS_TASKS}:${task.key}`, task.message)
+  const res = await exec()
+  if (!res[0]) {
+    throw new Error(`Can't add a task with key: ${task.key}`)
   }
-  throw new Error(`Can't add a task after 3 tries, last key: ${task.key}`)
 }
 
 async function getNextTask () {
   unscheduleExec()
   nextTask = null
-  let earliest
-  const keys = await redisClient.keys(`${DB_NS_TASKS}:*`)
+  const keys = await redisClient.zrangebyscore(`${DB_NS_TIMES}`, '-inf',
+    '+inf', 'withscores', 'limit', 0, 1)
   if (!keys.length) {
     console.log('No tasks to watch for')
     return
   }
-  keys.forEach(fullKey => {
-    const key = parseKey(fullKey)
-    if (!earliest || key.time < earliest.time) {
-      earliest = key
-    }
-  })
-  const message = await redisClient.get(earliest.fullKey)
+  const key = keys[0]
+  const message = await redisClient.get(`${DB_NS_TASKS}:${key}`)
   // Probably it was already removed by another instance.
   if (!message) {
     console.log('No tasks to watch for, last removed')
     return
   }
-  nextTask = new Task(earliest.time, message, earliest.key)
-  scheduleExec(new Date(earliest.time))
-  console.log(`Watching for task ${earliest.key}`)
+  const time = +key.split(':')[0]
+  nextTask = new Task(time, message, key)
+  scheduleExec(new Date(time))
+  console.log(`Watching for task ${key}`)
 }
 
 async function execTask () {
   console.log('Exec task')
-  const res = await redisClient.del(`${DB_NS_TASKS}:${nextTask.key}`)
-  if (!res) {
+  const message = nextTask.message
+  const multi = redisClient.multi()
+  const exec = promisify(multi.exec.bind(multi))
+  multi.zrem(`${DB_NS_TIMES}`, nextTask.key)
+  multi.del(`${DB_NS_TASKS}:${nextTask.key}`)
+  const res = await exec()
+  if (!res[0]) {
     console.log('Already executed')
     return
   }
-  // I assume it's nearly impossible that process will die between successful
-  // task removal and print, so we can avoid using WATCH and MULTI.
-  console.log(nextTask.message)
+  // I assume it's nearly impossible that process will die between
+  // successful task removal and print.
+  console.log(message)
 }
 
 function unscheduleExec () {

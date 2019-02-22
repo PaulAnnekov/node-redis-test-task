@@ -4,7 +4,7 @@ services:
   redis:
     image: redis:5.0.3-alpine
     restart: always
-    command: --bind 0.0.0.0 --notify-keyspace-events Kge$$ --appendonly yes --requirepass "${REDIS_PASSWORD}"
+    command: --bind 0.0.0.0 --notify-keyspace-events Kez$$ --appendonly yes --requirepass "${REDIS_PASSWORD}"
   app_1:
     image: node:11.9.0-alpine
     user: "node"
